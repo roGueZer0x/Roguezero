@@ -69,7 +69,10 @@ dotenv.config({ path: '../../.env' });
 // â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const configReport = getRuntimeConfigReport(process.env);
-const API_BASE = process.env.API_URL ?? 'http://localhost:4000';
+if (!process.env.API_URL) {
+  throw new Error('API_URL must be set on the worker service');
+}
+const API_BASE = process.env.API_URL;
 const POLL_MS  = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5000);
 const MIN_LOOP_MS = Number(process.env.WORKER_MIN_LOOP_INTERVAL_MS ?? 250);
 const READY_STARTING_POLL_MS = Number(process.env.WORKER_READY_STARTING_POLL_MS ?? 3000);

@@ -66,7 +66,11 @@ dotenv.config({ path: '../../.env' });
 const app = Fastify({ logger: true });
 const port = Number(process.env.API_PORT || 4000);
 const internalApiSecret = process.env.RZ_INTERNAL_SECRET?.trim() || null;
-const webPublicOrigin = process.env.WEB_PUBLIC_ORIGIN ?? process.env.FRONTEND_ORIGIN ?? 'http://localhost:3002';
+const webPublicOriginRaw = process.env.WEB_PUBLIC_ORIGIN ?? process.env.FRONTEND_ORIGIN;
+if (!webPublicOriginRaw) {
+  throw new Error('WEB_PUBLIC_ORIGIN (or FRONTEND_ORIGIN) must be set on the api service');
+}
+const webPublicOrigin = webPublicOriginRaw;
 const internalSecretBypassPaths = new Set(['/health']);
 const configReport = getRuntimeConfigReport(process.env);
 const JUPITER_GENERAL_RPS = Number(process.env.JUPITER_GENERAL_RPS ?? 8);
