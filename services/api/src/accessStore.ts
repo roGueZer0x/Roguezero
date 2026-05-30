@@ -256,7 +256,12 @@ export const enrollTrustedDeviceForWallet = async (walletAddress: string, device
 
     await client.query(
       `INSERT INTO trusted_web_devices (device_id_hash, user_id, enrolled_at, last_seen_at)
-       VALUES ($1, $2, COALESCE((SELECT gated_access_enrolled_at FROM rz_users WHERE id = $2), now()), now())
+       VALUES (
+         $1,
+         $2,
+         COALESCE((SELECT gated_access_enrolled_at FROM rz_users WHERE id::text = $2), now()),
+         now()
+       )
        ON CONFLICT (device_id_hash)
        DO UPDATE SET user_id = EXCLUDED.user_id, last_seen_at = now()`,
       [deviceIdHash, user.id],
