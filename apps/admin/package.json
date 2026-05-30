@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack -p 3001",
-    "build": "node ../../scripts/ensure-lightningcss-linux.mjs && next build",
+    "build": "node ./scripts/ensure-linux-natives.mjs && next build",
     "start": "next start -p 3001",
     "lint": "eslint"
   },
