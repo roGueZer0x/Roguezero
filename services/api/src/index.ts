@@ -65,7 +65,7 @@ dotenv.config({ path: '../../.env' });
 
 const app = Fastify({ logger: true });
 const port = Number(process.env.API_PORT || 4000);
-const internalApiSecret = process.env.RZ_INTERNAL_API_SECRET?.trim() || null;
+const internalApiSecret = process.env.RZ_INTERNAL_SECRET?.trim() || null;
 const webPublicOrigin = process.env.WEB_PUBLIC_ORIGIN ?? process.env.FRONTEND_ORIGIN ?? 'http://localhost:3002';
 const internalSecretBypassPaths = new Set(['/health']);
 const configReport = getRuntimeConfigReport(process.env);
@@ -1390,7 +1390,7 @@ app.addHook('onRequest', async (request, reply) => {
 
   if (!internalApiSecret) {
     if (process.env.NODE_ENV === 'production') {
-      app.log.error('RZ_INTERNAL_API_SECRET is not set in production');
+      app.log.error('RZ_INTERNAL_SECRET is not set in production');
       return reply.status(503).send({ error: 'Service not configured for secure internal access' });
     }
     return;

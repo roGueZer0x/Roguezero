@@ -5,7 +5,7 @@ const getApiBaseUrl = () => {
   return fromEnv.endsWith('/') ? fromEnv.slice(0, -1) : fromEnv;
 };
 
-const getInternalSecret = () => process.env.RZ_INTERNAL_API_SECRET ?? '';
+const getInternalSecret = () => process.env.RZ_INTERNAL_SECRET ?? '';
 
 const buildTargetUrl = (request: NextRequest, path: string[]) => {
   const base = getApiBaseUrl();
@@ -18,7 +18,7 @@ const proxy = async (request: NextRequest, path: string[]) => {
   const internalSecret = getInternalSecret();
   if (!internalSecret) {
     return NextResponse.json(
-      { error: 'RZ_INTERNAL_API_SECRET is not configured on web service' },
+      { error: 'RZ_INTERNAL_SECRET is not configured on web service' },
       { status: 500 },
     );
   }
