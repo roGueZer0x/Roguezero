@@ -1,0 +1,216 @@
+import bs58 from 'bs58';
+import {
+  ComputeBudgetProgram,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+  TransactionMessage,
+  VersionedTransaction,
+} from '@solana/web3.js';
+
+export const SENDER_TIP_ACCOUNTS = [
+  '4ACfpUFoaSD9bfPdeu6DBt89gB6ENTeHBXCAi87NhDEE',
+  'D2L6yPZ2FmmmTKPgzaMKdhu6EWZcTpLy1Vhx8uvZe7NZ',
+  '9bnz4RShgq1hAnLnZbP8kbgBg1kEmcJBYQq3gQbmnSta',
+  '5VY91ws6B2hMmBFRsXkoAAdsPHBJwRfBht4DXox3xkwn',
+  '2nyhqdwKcJZR2vcqCyrYsaPVdAnFoJjiksCXJ7hfEYgD',
+  '2q5pghRs6arqVjRvT5gfgWfWcHWmw1ZuCzphgd5KfWGJ',
+  'wyvPkWjVZz1M8fHQnMMCDTQDbkManefNNhweYk5WkcF',
+  '3KCKozbAaF75qEU33jtzozcJ29yJuaLJTy2jFdzUY8bT',
+  '4vieeGHPYPG2MmyPRcYjdiDmmhN3ww7hsFNap8pVN3Ey',
+  '4TQLFNWK8AovT1gFvda5jfw2oJeRMKEmw7aH6MGBJ3or',
+] as const;
+
+export const priorityLevelValues = ['Medium', 'High', 'VeryHigh'] as const;
+export type PriorityLevel = (typeof priorityLevelValues)[number];
+
+export type HeliusTradingConfig = {
+  gatekeeperEnabled: boolean;
+  senderEnabled: boolean;
+  senderEndpoint: string;
+  senderUseSwqosOnly: boolean;
+  senderMinTipLamports: number;
+  priorityFeeLevel: PriorityLevel;
+  priorityFeeMultiplier: number;
+  priorityFeeFallbackMicroLamports: number;
+};
+
+const parseBoolean = (value: string | undefined, defaultValue: boolean) => {
+  if (value === undefined) return defaultValue;
+  return value === 'true';
+};
+
+const parsePositiveInt = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parsePositiveNumber = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parsePriorityLevel = (value: string | undefined): PriorityLevel => {
+  if (value === 'High' || value === 'VeryHigh') return value;
+  return 'Medium';
+};
+
+export const getHeliusTradingConfig = (env: NodeJS.ProcessEnv): HeliusTradingConfig => {
+  const senderUseSwqosOnly = parseBoolean(env.HELIUS_SENDER_USE_SWQOS_ONLY, false);
+  const defaultSenderEndpoint = senderUseSwqosOnly
+    ? 'https://sender.helius-rpc.com/fast?swqos_only=true'
+    : 'https://sender.helius-rpc.com/fast';
+
+  return {
+    gatekeeperEnabled: parseBoolean(env.HELIUS_GATEKEEPER_ENABLED, true),
+    senderEnabled: parseBoolean(env.HELIUS_SENDER_ENABLED, true),
+    senderEndpoint: env.HELIUS_SENDER_ENDPOINT || defaultSenderEndpoint,
+    senderUseSwqosOnly,
+    senderMinTipLamports: parsePositiveInt(
+      env.HELIUS_SENDER_MIN_TIP_LAMPORTS,
+      senderUseSwqosOnly ? 5_000 : 200_000,
+    ),
+    priorityFeeLevel: parsePriorityLevel(env.HELIUS_PRIORITY_FEE_LEVEL),
+    priorityFeeMultiplier: parsePositiveNumber(env.HELIUS_PRIORITY_FEE_MULTIPLIER, 1.2),
+    priorityFeeFallbackMicroLamports: parsePositiveInt(
+      env.HELIUS_PRIORITY_FEE_FALLBACK_MICROLAMPORTS,
+      50_000,
+    ),
+  };
+};
+
+export const selectSenderTipAccount = (random = Math.random) => {
+  const index = Math.min(
+    SENDER_TIP_ACCOUNTS.length - 1,
+    Math.floor(random() * SENDER_TIP_ACCOUNTS.length),
+  );
+  return new PublicKey(SENDER_TIP_ACCOUNTS[index]);
+};
+
+export const createSenderTipInstruction = (
+  payer: PublicKey,
+  lamports: number,
+  random = Math.random,
+) => SystemProgram.transfer({
+  fromPubkey: payer,
+  toPubkey: selectSenderTipAccount(random),
+  lamports,
+});
+
+export const composePreparedSwapInstructions = (params: {
+  senderEnabled: boolean;
+  payer: PublicKey;
+  computeUnitLimit: number;
+  priorityFeeMicroLamports?: number;
+  senderTipLamports?: number;
+  baseComputeBudgetInstructions: TransactionInstruction[];
+  coreSwapInstructions: TransactionInstruction[];
+  random?: () => number;
+}) => {
+  if (!params.senderEnabled) {
+    return [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: params.computeUnitLimit }),
+      ...params.baseComputeBudgetInstructions,
+      ...params.coreSwapInstructions,
+    ];
+  }
+
+  return [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: params.computeUnitLimit }),
+    ComputeBudgetProgram.setComputeUnitPrice({
+      microLamports: params.priorityFeeMicroLamports ?? 50_000,
+    }),
+    ...params.coreSwapInstructions,
+    createSenderTipInstruction(
+      params.payer,
+      params.senderTipLamports ?? 200_000,
+      params.random,
+    ),
+  ];
+};
+
+export const buildPriorityFeeEstimateRequest = (params: {
+  payer: PublicKey;
+  blockhash: string;
+  instructions: TransactionInstruction[];
+  priorityLevel: PriorityLevel;
+}) => {
+  const options = {
+    priorityLevel: params.priorityLevel,
+    recommended: true,
+  };
+
+  try {
+    const estimateTransaction = new Transaction({
+      feePayer: params.payer,
+      recentBlockhash: params.blockhash,
+    });
+
+    for (const instruction of params.instructions) {
+      estimateTransaction.add(instruction);
+    }
+
+    return {
+      jsonrpc: '2.0',
+      id: 'priority-fee-estimate',
+      method: 'getPriorityFeeEstimate',
+      params: [
+        {
+          transaction: bs58.encode(
+            estimateTransaction.serialize({
+              requireAllSignatures: false,
+              verifySignatures: false,
+            }),
+          ),
+          options,
+        },
+      ],
+    };
+  } catch {
+    const accountKeys = [...new Set([
+      params.payer.toBase58(),
+      ...params.instructions.flatMap((instruction) => [
+        instruction.programId.toBase58(),
+        ...instruction.keys.map((account) => account.pubkey.toBase58()),
+      ]),
+    ])];
+
+    return {
+      jsonrpc: '2.0',
+      id: 'priority-fee-estimate',
+      method: 'getPriorityFeeEstimate',
+      params: [
+        {
+          accountKeys,
+          options,
+        },
+      ],
+    };
+  }
+};
+
+export const parsePriorityFeeEstimateResponse = (
+  payload: unknown,
+  fallbackMicroLamports: number,
+  multiplier: number,
+) => {
+  const estimate = (payload as { result?: { priorityFeeEstimate?: unknown } } | null)?.result?.priorityFeeEstimate;
+  const numericEstimate = typeof estimate === 'number' && Number.isFinite(estimate)
+    ? estimate
+    : fallbackMicroLamports;
+  return Math.max(1, Math.ceil(numericEstimate * multiplier));
+};
+
+export const parseSenderSignature = (payload: unknown) => {
+  const errorMessage = (payload as { error?: { message?: unknown } } | null)?.error?.message;
+  if (typeof errorMessage === 'string' && errorMessage.length > 0) {
+    throw new Error(errorMessage);
+  }
+
+  const result = (payload as { result?: unknown } | null)?.result;
+  if (typeof result !== 'string' || result.length === 0) {
+    throw new Error('Sender did not return a transaction signature');
+  }
+  return result;
+};

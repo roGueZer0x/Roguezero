@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "build": {
+      "source": "helius-labs/core-ai",
+      "sourceType": "github",
+      "skillPath": "helius-plugin/skills/build/SKILL.md",
+      "computedHash": "1098ffbe02f6561984eb921ff05e512b3733c2755096f3bf7e0ba43ed9a2a61c"
+    }
+  }
+}
