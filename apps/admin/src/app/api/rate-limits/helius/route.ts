@@ -4,10 +4,20 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const rpcUrl = process.env.HELIUS_RPC_URL;
+  // Mirror worker behavior (packages/runtime-config getHeliusRpcUrl):
+  // when HELIUS_GATEKEEPER_ENABLED, use the beta gatekeeper URL with HELIUS_API_KEY;
+  // otherwise use the raw HELIUS_RPC_URL.
+  const gatekeeperEnabled = ['1', 'true', 'yes', 'on'].includes(
+    (process.env.HELIUS_GATEKEEPER_ENABLED ?? '').toLowerCase().trim(),
+  );
+  const apiKey = process.env.HELIUS_API_KEY;
+  const rawRpc = process.env.HELIUS_RPC_URL;
+  const rpcUrl = gatekeeperEnabled && apiKey
+    ? `https://beta.helius-rpc.com/?api-key=${apiKey}`
+    : rawRpc;
   if (!rpcUrl) {
     return NextResponse.json(
-      { connected: false, error: 'HELIUS_RPC_URL must be set on the admin service' },
+      { connected: false, error: 'HELIUS_RPC_URL (or HELIUS_API_KEY with gatekeeper) must be set on the admin service' },
       { status: 500 },
     );
   }
